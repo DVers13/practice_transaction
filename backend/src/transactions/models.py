@@ -11,17 +11,15 @@ class Client(Base):
     client: Mapped[str] = mapped_column(primary_key=True)
     date_of_birth: Mapped[datetime]
     passport: Mapped[str]
-    passport_valid_to: Mapped[datetime]
+    passport_valid_to: Mapped[str]
     phone: Mapped[str]
 
 class Card(Base):
     __tablename__ = "card"
 
-    card_id: Mapped[str] = mapped_column(primary_key=True)
+    card_id: Mapped[int] = mapped_column(primary_key=True)
     client: Mapped[str] = mapped_column(ForeignKey('client.client'))
-    passport: Mapped[str]
-    passport_valid_to: Mapped[datetime]
-    phone: Mapped[str]
+    card: Mapped[str]
 
 class Terminal(Base):
     __tablename__ = "terminal"

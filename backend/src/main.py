@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import create_tables, delete_tables
+from transactions.router import router as transactions_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -13,7 +14,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Transaction", lifespan=lifespan)
 
-# app.include_router(router)
+app.include_router(transactions_router)
 
 origins = ["*"]
 
