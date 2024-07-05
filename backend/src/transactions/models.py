@@ -43,7 +43,7 @@ class Location(Base):
 class Transaction(Base):
     __tablename__ = "transaction"
 
-    id_transacrion: Mapped[int] = mapped_column(primary_key=True)
+    id_transaction: Mapped[int] = mapped_column(primary_key=True)
     card_id: Mapped[int] = mapped_column(ForeignKey('card.card_id'))
     terminal_id: Mapped[int] = mapped_column(ForeignKey('terminal.terminal_id'))
     location_id: Mapped[int] = mapped_column(ForeignKey('location.location_id'))

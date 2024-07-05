@@ -13,6 +13,8 @@ if st.button('Write data to PostgreSQL'):
         files = {'file': file.getvalue()}
         response = requests.post(url, files=files)
     st.success('Done!')
+
+v = st.slider("вклад", min_value=10000, max_value=10000000, step=1000)
 if st.button('Find Fraud'):
     with st.spinner("Just a moment ..."): 
         time.sleep(1)

@@ -75,25 +75,18 @@ class TransactionRepository:
                     location = existing_location
                 location_id = location.location_id
 
-                existing_transaction = await session.execute(select(Transaction).filter_by(card_id = card_id,
+
+                transaction = Transaction(
+                    id_transaction = int(row[0]),
+                    card_id = card_id,
                     terminal_id = terminal_id,
                     location_id = location_id,
                     date = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S"),
                     operation_type = row[8],
                     operation_result = row[10],
-                    amount = row[9]))
-                existing_transaction = existing_transaction.scalar_one_or_none()
-                if not existing_transaction:
-                    transaction = Transaction(
-                        card_id = card_id,
-                        terminal_id = terminal_id,
-                        location_id = location_id,
-                        date = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S"),
-                        operation_type = row[8],
-                        operation_result = row[10],
-                        amount = row[9]
-                    )
-                    session.add(transaction)
+                    amount = row[9]
+                )
+                session.add(transaction)
 
             await session.commit()
             return {"status": "csv file upload and data stored in PostgreSQL"}
