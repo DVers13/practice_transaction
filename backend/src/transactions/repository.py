@@ -5,7 +5,7 @@ from sqlalchemy import func, select, text
 from database import new_session, engine
 from transactions.models import Client, Card, Terminal, City, Location, Transaction
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from transactions.schemas import TransactionAnalysis
 class TransactionRepository:
     @classmethod
     async def upload_csv(cls, file: UploadFile = File(...)):
@@ -98,6 +98,7 @@ class TransactionRepository:
                      )
             result = await session.execute(query)
             transaction_row = result.mappings().all()
+            transaction_analysis = []
             for row in transaction_row:
                 query = (select(Card.client).
                      where(Card.card_id == row.card_id)
@@ -116,11 +117,9 @@ class TransactionRepository:
                         order_by(Transaction.date)
                      )
                 result = await session.execute(query)
-                client_transaction = result.mappings().all()
-
+                client_transaction = result.scalars().all()
                 previous_transaction = None
                 for ctran in client_transaction:
-                    ctran = ctran.Transaction
                     if previous_transaction is not None:
                         time_difference = ctran.date - previous_transaction.date
                         amount_diff = float(ctran.amount) - float(previous_transaction.amount)
@@ -134,9 +133,7 @@ class TransactionRepository:
                     if amount_diff > 250000:
                         big_amount_diffs += 1
                     previous_transaction = ctran
-                    print(f'Client: {current_client}, Failures: {num_failures}, Time Difference: {time_difference}')
-                    
-
-
-            return {"status": 200}
+                    transaction_analysis.append(TransactionAnalysis(client=current_client.client, failures=num_failures, time_diff=time_difference, time_diff_count=time_diffs, amount_diff_count=big_amount_diffs))
+                    # print(f'Client: {current_client}, Failures: {num_failures}, Time Difference: {time_difference}')
+            return transaction_analysis
                 
