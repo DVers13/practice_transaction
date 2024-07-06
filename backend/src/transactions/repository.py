@@ -13,11 +13,8 @@ class TransactionRepository:
         csv_data = contents.decode('utf-8').splitlines()
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
-        c = 0
         async with new_session() as session:
             for row in csv_reader:
-                c+= 1
-                print(c)
                 existing_client = await session.execute(select(Client.client).filter_by(client=row[3]))
                 existing_client = existing_client.scalar_one_or_none()
                 if not existing_client:
