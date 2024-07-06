@@ -51,3 +51,4 @@ class Transaction(Base):
     operation_type: Mapped[str]
     operation_result: Mapped[str]
     amount: Mapped[str]
+    #is_fraud: Mapped[str] # %

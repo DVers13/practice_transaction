@@ -1,14 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import Depends, UploadFile, File
 import csv
-from sqlalchemy import select
-from database import new_session
+from sqlalchemy import func, select, text
+from database import new_session, engine
 from transactions.models import Client, Card, Terminal, City, Location, Transaction
 from sqlalchemy.ext.asyncio import AsyncSession
 
 class TransactionRepository:
     @classmethod
-    async def upload_csv(cls, file: UploadFile = File(...)) -> int:
+    async def upload_csv(cls, file: UploadFile = File(...)):
         contents = await file.read()
 
         csv_data = contents.decode('utf-8').splitlines()
@@ -90,3 +90,53 @@ class TransactionRepository:
 
             await session.commit()
             return {"status": "csv file upload and data stored in PostgreSQL"}
+    @classmethod
+    async def run_process_transactions(cls):
+        async with new_session() as session:
+            query = (select(Transaction.id_transaction, Transaction.card_id, Transaction.date, Transaction.operation_result).
+                     order_by(Transaction.card_id, Transaction.date)
+                     )
+            result = await session.execute(query)
+            transaction_row = result.mappings().all()
+            for row in transaction_row:
+                query = (select(Card.client).
+                     where(Card.card_id == row.card_id)
+                     )
+                result = await session.execute(query)
+                current_client = result.mappings().first()
+
+                num_failures = 0
+                time_diffs = 0
+                amount_diff = 0
+                big_amount_diffs = 0
+
+                query = (select(Transaction).
+                        join(Card, Card.card_id == Transaction.card_id).
+                        where(Card.client == current_client.client).
+                        order_by(Transaction.date)
+                     )
+                result = await session.execute(query)
+                client_transaction = result.mappings().all()
+
+                previous_transaction = None
+                for ctran in client_transaction:
+                    ctran = ctran.Transaction
+                    if previous_transaction is not None:
+                        time_difference = ctran.date - previous_transaction.date
+                        amount_diff = float(ctran.amount) - float(previous_transaction.amount)
+                    else:
+                        time_difference = ctran.date - ctran.date
+                        amount_diff = 0
+                    if ctran.operation_result == "Отказ":
+                        num_failures += 1
+                    if time_difference < timedelta(seconds=30):
+                        time_diffs += 1
+                    if amount_diff > 250000:
+                        big_amount_diffs += 1
+                    previous_transaction = ctran
+                    print(f'Client: {current_client}, Failures: {num_failures}, Time Difference: {time_difference}')
+                    
+
+
+            return {"status": 200}
+                
