@@ -2,9 +2,8 @@ from datetime import datetime, timedelta
 from fastapi import Depends, UploadFile, File
 import csv
 from sqlalchemy import func, select, text
-from database import new_session, engine
+from database import new_session
 from transactions.models import Client, Card, Terminal, City, Location, Transaction
-from sqlalchemy.ext.asyncio import AsyncSession
 from transactions.schemas import TransactionAnalysis
 class TransactionRepository:
     @classmethod
@@ -99,13 +98,16 @@ class TransactionRepository:
             result = await session.execute(query)
             transaction_row = result.mappings().all()
             transaction_analysis = []
-            for row in transaction_row:
+            repeat_client = []
+            for row in transaction_row: 
                 query = (select(Card.client).
                      where(Card.card_id == row.card_id)
                      )
                 result = await session.execute(query)
                 current_client = result.mappings().first()
-
+                if current_client in repeat_client:
+                    continue
+                repeat_client.append(current_client)
                 num_failures = 0
                 time_diffs = 0
                 amount_diff = 0
