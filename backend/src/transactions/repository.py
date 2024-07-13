@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 from fastapi import UploadFile, File
 import csv
-from sqlalchemy import select
+from sqlalchemy import select, update
 from database import new_session
 from transactions.models import Client, Card, Terminal, City, Location, Transaction
-from transactions.schemas import TransactionFraud
+from transactions.schemas import TransactionFraud, Params
 class TransactionRepository:
-
+    
     @classmethod
     async def upload_csv(cls, file: UploadFile = File(...)):
         contents = await file.read()
@@ -15,28 +15,57 @@ class TransactionRepository:
         headers = next(csv_reader)
         async with new_session() as session:
             for row in csv_reader:
-                existing_client = await session.execute(select(Client.client).filter_by(client=row[3]))
-                existing_client = existing_client.scalar_one_or_none()
-                if not existing_client:
-                    client = Client(
+                existing_client = await session.execute(select(Client.client, Client.date_of_birth, Client.passport_valid_to, Client.phone).filter_by(client=row[3]))
+                existing_client = existing_client.mappings().first()
+                add_client = False if existing_client else True
+                update_client = False
+                date_of_birth = datetime.strptime(row[4], "%Y-%m-%d")
+                passport_valid_to = row[6]
+                phone=row[7]
+
+                if not add_client:
+                    if existing_client.date_of_birth != date_of_birth:
+                        date_of_birth = existing_client.date_of_birth
+                        update_client = True
+                    if existing_client.phone != phone:
+                        phone = existing_client.phone
+                        update_client = True
+                    if existing_client.passport_valid_to != 'бессрочно':
+                        if passport_valid_to < existing_client.passport_valid_to:
+                            passport_valid_to = existing_client.passport_valid_to
+                            update_client = True
+
+                client = Client(
                             client=row[3],
-                            date_of_birth=datetime.strptime(row[4], "%Y-%m-%d"),
+                            date_of_birth=date_of_birth,
                             passport=row[5],
-                            passport_valid_to=row[6],
-                            phone=row[7]
+                            passport_valid_to=passport_valid_to,
+                            phone=phone
                         )
+                
+                if add_client:
                     session.add(client)
                     await session.flush()
-                else:
-                    client = existing_client
+                elif update_client:
+                    update_dict = {'client': client.client,
+                                   'date_of_birth':client.date_of_birth,
+                                   'passport':client.passport,
+                                   'passport_valid_to':client.passport_valid_to,
+                                   'phone':client.phone}
+                    stmt = (
+                        update(Client)
+                        .where(Client.client == row[3])
+                        .values(**update_dict)
+                    )
+                    await session.execute(stmt)
 
                 existing_card = await session.execute(select(Card.card_id).filter_by(card=row[2]))
                 existing_card = existing_card.scalar_one_or_none()
                 if not existing_card:
                     card = Card(client = row[3], card = row[2])
-                    card_id = card.card_id
                     session.add(card)
                     await session.flush()
+                    card_id = card.card_id
                 else:
                     card_id = existing_card
 
@@ -44,9 +73,9 @@ class TransactionRepository:
                 existing_terminal = existing_terminal.scalar_one_or_none()
                 if not existing_terminal:
                     terminal = Terminal(terminal_type = row[11])
-                    terminal_id = terminal.terminal_id
                     session.add(terminal)
                     await session.flush()
+                    terminal_id = terminal.terminal_id
                 else:
                     terminal_id = existing_terminal
 
@@ -54,9 +83,9 @@ class TransactionRepository:
                 existing_city = existing_city.scalar_one_or_none()
                 if not existing_city:
                     city = City(city = row[12])
-                    city_id = city.city_id
                     session.add(city)
                     await session.flush()
+                    city_id = city.city_id
                 else:
                     city_id = existing_city
 
@@ -65,9 +94,9 @@ class TransactionRepository:
                 existing_location = existing_location.scalar_one_or_none()
                 if not existing_location:
                     location = Location(city_id = city_id, address = row[13])
-                    location_id = location.location_id
                     session.add(location)
                     await session.flush()
+                    location_id = location.location_id
                 else:
                     location_id = existing_location
 
@@ -90,9 +119,13 @@ class TransactionRepository:
             return {"status": "csv file upload and data stored in PostgreSQL"}
         
     @classmethod
-    async def run_find_fraud(cls, list_id_transaction: list[int] = None):
+    async def run_find_fraud(cls, params: Params):
+        params = params.model_dump()
+        list_id_transaction = params.pop("list_id_transaction")
+        count_time_difference_max = params.pop("count_time_difference_max")
+        time_difference_seconds = params.pop("time_difference_seconds")
+        time_difference_minutes = params.pop("time_difference_minutes")
         async with new_session() as session:
-
             if not list_id_transaction:
                 query = select(Transaction.id_transaction)
                 result = await session.execute(query)
@@ -143,12 +176,12 @@ class TransactionRepository:
                         time_difference = ctran.date - ctran.date
                         count_time_difference += 1
 
-                    if count_time_difference > 5 and time_difference <= timedelta(minutes=1):
+                    if count_time_difference > count_time_difference_max and time_difference <= timedelta(seconds=time_difference_seconds):
                         first_pattern = True
 
                     amount_all += float(ctran.amount)
 
-                    if (transaction_row.date - ctran.date) <= timedelta(minutes=30) and transaction_row.city != ctran.city and not third_pattern:
+                    if (transaction_row.date - ctran.date) <= timedelta(minutes=time_difference_minutes) and transaction_row.city != ctran.city and not third_pattern:
                         third_pattern = True
                     
                     previous_transaction = ctran

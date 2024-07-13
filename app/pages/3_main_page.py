@@ -1,14 +1,19 @@
 import csv
+import time
 import streamlit as st
 import requests
 from datetime import datetime, timedelta
 import pandas as pd
-
+import matplotlib.pyplot as plt
 
 if 'count_tran' not in st.session_state:
     st.session_state.count_tran = 5
 if 'time_seconds' not in st.session_state:
     st.session_state.time_seconds = 60
+if 'time_minutes' not in st.session_state:
+    st.session_state.time_minutes = 30
+if 'threshold_amount' not in st.session_state:
+    st.session_state.threshold_amount = 4.0
 if 'settings' not in st.session_state:
     st.session_state.settings = False
 if 'current_csv_transaction' not in st.session_state:
@@ -26,6 +31,7 @@ st.sidebar.info("info =)")
 
 if st.button('Write data to PostgreSQL'):
     with st.spinner("Just a moment ..."): 
+        s = time.time()
         url = "http://127.0.0.1:8000/transaction/upload_csv/"
         files = {'file': file.getvalue()}
         response = requests.post(url, files=files)
@@ -34,6 +40,7 @@ if st.button('Write data to PostgreSQL'):
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
         st.session_state.current_csv_transaction = [row[0] for row in csv_reader]
+        print(time.time() - s)
 
     st.success('Done!')
 
@@ -55,7 +62,11 @@ def correct_time(time):
 
 def fetch_data():
     url = "http://127.0.0.1:8000/transaction/run_find_fraud"
-    response = requests.post(url)
+    data = {'count_time_difference_max': st.session_state.count_tran,
+            'time_difference_seconds': st.session_state.time_seconds,
+            'time_difference_minutes': st.session_state.time_minutes,
+            'threshold_amount': st.session_state.threshold_amount}
+    response = requests.post(url, json=data)
     json_response = response.json()
     return pd.DataFrame(
         [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
@@ -66,8 +77,13 @@ def fetch_data():
 
 def run_find_fraud_current():
     url = "http://127.0.0.1:8000/transaction/run_find_fraud"
-    print(st.session_state.current_csv_transaction)
-    response = requests.post(url, json=[int(tr) for tr in st.session_state.current_csv_transaction])
+    data = {'list_id_transaction': [int(tr) for tr in st.session_state.current_csv_transaction],
+            'count_time_difference_max': st.session_state.count_tran,
+            'time_difference_seconds': st.session_state.time_seconds,
+            'time_difference_minutes': st.session_state.time_minutes,
+            'threshold_amount': st.session_state.threshold_amount}
+            
+    response = requests.post(url, json=data)
     json_response = response.json()
     return pd.DataFrame(
         [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
@@ -106,15 +122,21 @@ if st.session_state.settings:
     st.session_state.count_tran = count_tran
     st.session_state.time_seconds = time_seconds
     st.markdown(""" 2ой паттерн """)
+    threshold_amount = st.slider("threshold_amount", min_value=1.0, max_value=50.0, value=float(st.session_state.threshold_amount), step=0.1)
+    st.session_state.threshold_amount = threshold_amount
     st.markdown(""" 3ий паттерн """)
+    time_minutes = st.slider("time_minutes", 5, 96, st.session_state.time_minutes, 1)
+    st.session_state.time_minutes = time_minutes
 
 
-if st.button('Find Fraud All'):
+ffa, ffc = st.columns([1, 3])
+
+if ffa.button('Find Fraud All'):
     with st.spinner("Just a moment ..."): 
         st.session_state.process_transactions = fetch_data()
         st.success('Done!')
 
-if st.button('Find Fraud current csv'):
+if ffc.button('Find Fraud current csv'):
     with st.spinner("Just a moment ..."):
         st.session_state.process_transactions = run_find_fraud_current()
         st.success('Done!')
@@ -124,4 +146,9 @@ if st.session_state.process_transactions is not None:
     paged_df = paginate_dataframe(st.session_state.process_transactions, page_size)
     st.table(paged_df)
 
-st.text("Можно визуализировать какие нибудь графики")
+    fig, ax = plt.subplots()
+    ax.pie([paged_df.first_pattern[paged_df['first_pattern']==True].count(), 
+            paged_df.second_pattern[paged_df['second_pattern']==True].count(),
+            paged_df.third_pattern[paged_df['third_pattern']==True].count()],
+            labels=['first_pattern', 'second_pattern', 'third_pattern'])
+    st.pyplot(fig)
