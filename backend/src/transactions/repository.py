@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta
-from fastapi import Depends, UploadFile, File
+from fastapi import UploadFile, File
 import csv
-from sqlalchemy import func, select, text
+from sqlalchemy import select
 from database import new_session
 from transactions.models import Client, Card, Terminal, City, Location, Transaction
-from transactions.schemas import TransactionAnalysis
+from transactions.schemas import TransactionFraud
 class TransactionRepository:
+
     @classmethod
     async def upload_csv(cls, file: UploadFile = File(...)):
         contents = await file.read()
-
         csv_data = contents.decode('utf-8').splitlines()
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
@@ -30,109 +30,142 @@ class TransactionRepository:
                 else:
                     client = existing_client
 
-                existing_card = await session.execute(select(Card).filter_by(card=row[2]))
+                existing_card = await session.execute(select(Card.card_id).filter_by(card=row[2]))
                 existing_card = existing_card.scalar_one_or_none()
                 if not existing_card:
                     card = Card(client = row[3], card = row[2])
+                    card_id = card.card_id
                     session.add(card)
                     await session.flush()
                 else:
-                    card = existing_card
-                card_id = card.card_id
+                    card_id = existing_card
 
-                existing_terminal = await session.execute(select(Terminal).filter_by(terminal_type=row[11]))
+                existing_terminal = await session.execute(select(Terminal.terminal_id).filter_by(terminal_type=row[11]))
                 existing_terminal = existing_terminal.scalar_one_or_none()
                 if not existing_terminal:
                     terminal = Terminal(terminal_type = row[11])
+                    terminal_id = terminal.terminal_id
                     session.add(terminal)
                     await session.flush()
                 else:
-                    terminal = existing_terminal
-                terminal_id = terminal.terminal_id
+                    terminal_id = existing_terminal
 
-                existing_city = await session.execute(select(City).filter_by(city=row[12]))
+                existing_city = await session.execute(select(City.city_id).filter_by(city=row[12]))
                 existing_city = existing_city.scalar_one_or_none()
                 if not existing_city:
                     city = City(city = row[12])
+                    city_id = city.city_id
                     session.add(city)
                     await session.flush()
                 else:
-                    city = existing_city
-                city_id = city.city_id
+                    city_id = existing_city
 
 
-                existing_location = await session.execute(select(Location).filter_by(city_id = city_id, address = row[13]))
+                existing_location = await session.execute(select(Location.location_id).filter_by(city_id = city_id, address = row[13]))
                 existing_location = existing_location.scalar_one_or_none()
                 if not existing_location:
                     location = Location(city_id = city_id, address = row[13])
+                    location_id = location.location_id
                     session.add(location)
                     await session.flush()
                 else:
-                    location = existing_location
-                location_id = location.location_id
+                    location_id = existing_location
 
-
-                transaction = Transaction(
-                    id_transaction = int(row[0]),
-                    card_id = card_id,
-                    terminal_id = terminal_id,
-                    location_id = location_id,
-                    date = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S"),
-                    operation_type = row[8],
-                    operation_result = row[10],
-                    amount = row[9]
-                )
-                session.add(transaction)
+                existing_transaction = await session.execute(select(Transaction.id_transaction).filter_by(id_transaction = int(row[0])))
+                existing_transaction = existing_transaction.scalar_one_or_none()
+                if not existing_transaction:
+                    transaction = Transaction(
+                        id_transaction = int(row[0]),
+                        card_id = card_id,
+                        terminal_id = terminal_id,
+                        location_id = location_id,
+                        date = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S"),
+                        operation_type = row[8],
+                        operation_result = row[10],
+                        amount = row[9]
+                    )
+                    session.add(transaction)
 
             await session.commit()
             return {"status": "csv file upload and data stored in PostgreSQL"}
+        
     @classmethod
-    async def run_process_transactions(cls):
+    async def run_find_fraud(cls, list_id_transaction: list[int] = None):
         async with new_session() as session:
-            query = (select(Transaction.id_transaction, Transaction.card_id, Transaction.date, Transaction.operation_result).
-                     order_by(Transaction.card_id, Transaction.date)
-                     )
-            result = await session.execute(query)
-            transaction_row = result.mappings().all()
-            transaction_analysis = []
-            repeat_client = []
-            for row in transaction_row: 
-                query = (select(Card.client).
-                     where(Card.card_id == row.card_id)
-                     )
-                result = await session.execute(query)
-                current_client = result.mappings().first()
-                if current_client in repeat_client:
-                    continue
-                repeat_client.append(current_client)
-                num_failures = 0
-                time_diffs = 0
-                amount_diff = 0
-                big_amount_diffs = 0
 
-                query = (select(Transaction).
-                        join(Card, Card.card_id == Transaction.card_id).
-                        where(Card.client == current_client.client).
-                        order_by(Transaction.date)
-                     )
+            if not list_id_transaction:
+                query = select(Transaction.id_transaction)
                 result = await session.execute(query)
-                client_transaction = result.scalars().all()
+                list_id_transaction = result.scalars().all()
+            transaction_fraud = []
+            for id_transaction in list_id_transaction:
+
+                is_night = False
+
+                query = (select(City.city, Transaction.date, Transaction.operation_result, Transaction.amount, Transaction.card_id, Transaction.id_transaction).
+                        join(Location, Location.location_id == Transaction.location_id).
+                        join(City, City.city_id == Location.city_id).
+                        where(Transaction.id_transaction == id_transaction))
+                result = await session.execute(query)
+                transaction_row = result.mappings().first()
+
+                query = (select(Card.client).
+                        where(Card.card_id == transaction_row.card_id))
+                result = await session.execute(query)
+                client = result.scalar_one()
+                
+                if transaction_row.date.hour >= 0 and transaction_row.date.hour <= 6:
+                    is_night = True
+
+                query = (select(City.city, Transaction.date, Transaction.operation_result, Transaction.amount).
+                        join(Card, Card.card_id == Transaction.card_id).
+                        join(Location, Location.location_id == Transaction.location_id).
+                        join(City, City.city_id == Location.city_id).
+                        where(Card.client == client, Transaction.date <= transaction_row.date))
+                result = await session.execute(query)
+                client_transaction = result.mappings().all()
+
                 previous_transaction = None
+                time_difference = 0
+                count_time_difference = 0
+                amount_all = 0
+                amount_count = 0
+                threshold_amount = 4
+                first_pattern = False # 5 тр в минуту
+                second_pattern = False # превышение среднего
+                third_pattern = False # смена локации в течении менее 30мин
+                
                 for ctran in client_transaction:
-                    if previous_transaction is not None:
-                        time_difference = ctran.date - previous_transaction.date
-                        amount_diff = float(ctran.amount) - float(previous_transaction.amount)
+                    if previous_transaction is not None and not first_pattern:
+                        time_difference += ctran.date - previous_transaction.date
+                        count_time_difference += 1
                     else:
                         time_difference = ctran.date - ctran.date
-                        amount_diff = 0
-                    if ctran.operation_result == "Отказ":
-                        num_failures += 1
-                    if time_difference < timedelta(seconds=30):
-                        time_diffs += 1
-                    if amount_diff > 250000:
-                        big_amount_diffs += 1
+                        count_time_difference += 1
+
+                    if count_time_difference > 5 and time_difference <= timedelta(minutes=1):
+                        first_pattern = True
+
+                    amount_all += float(ctran.amount)
+
+                    if (transaction_row.date - ctran.date) <= timedelta(minutes=30) and transaction_row.city != ctran.city and not third_pattern:
+                        third_pattern = True
+                    
                     previous_transaction = ctran
-                    transaction_analysis.append(TransactionAnalysis(client=current_client.client, failures=num_failures, time_diff=time_difference, time_diff_count=time_diffs, amount_diff_count=big_amount_diffs))
-                    # print(f'Client: {current_client}, Failures: {num_failures}, Time Difference: {time_difference}')
-            return transaction_analysis
+                
+                amount_count = len(client_transaction) - 1 if len(client_transaction) > 1 else 0
+                if amount_count > 0 and not second_pattern:
+                    if float(transaction_row.amount) > (((amount_all - float(transaction_row.amount)) / (amount_count)) * threshold_amount):
+                        second_pattern = True
+                
+                fraud = TransactionFraud(
+                    id_transaction = transaction_row.id_transaction,
+                    client=client,
+                    first_pattern=first_pattern,
+                    second_pattern=second_pattern,
+                    third_pattern=third_pattern
+                )
+                if fraud.first_pattern or fraud.second_pattern or fraud.third_pattern:
+                    transaction_fraud.append(fraud)
+            return transaction_fraud
                 

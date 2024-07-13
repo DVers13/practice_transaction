@@ -1,10 +1,8 @@
-from datetime import datetime, timedelta
-from typing import Optional
 from pydantic import BaseModel
 
-class TransactionAnalysis(BaseModel):
+class TransactionFraud(BaseModel):
+    id_transaction: int
     client: str
-    failures: int
-    time_diff: timedelta
-    time_diff_count: int
-    amount_diff_count: int
+    first_pattern: bool
+    second_pattern: bool
+    third_pattern: bool

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
 
 from transactions.repository import TransactionRepository
 
@@ -14,7 +14,7 @@ async def add_task(file: UploadFile = File(...)):
     result = await TransactionRepository.upload_csv(file)
     return result
 
-@router.get("/run_process_transactions")
-async def run_process_transactions():
-    result = await TransactionRepository.run_process_transactions()
+@router.post("/run_find_fraud")
+async def run_find_fraud(list_id_transaction: list[int] = None):
+    result = await TransactionRepository.run_find_fraud(list_id_transaction)
     return result
