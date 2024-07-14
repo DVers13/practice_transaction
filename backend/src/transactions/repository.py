@@ -15,14 +15,15 @@ class TransactionRepository:
         headers = next(csv_reader)
         async with new_session() as session:
             for row in csv_reader:
-                existing_client = await session.execute(select(Client.client, Client.date_of_birth, Client.passport_valid_to, Client.phone).filter_by(client=row[3]))
+                existing_client = await session.execute(select(Client.client, Client.date_of_birth, Client.passport_valid_to, Client.phone, Client.passport).filter_by(client=row[3]))
                 existing_client = existing_client.mappings().first()
                 add_client = False if existing_client else True
                 update_client = False
                 date_of_birth = datetime.strptime(row[4], "%Y-%m-%d")
                 passport_valid_to = row[6]
                 phone=row[7]
-
+                passport=row[5]
+                client_id=row[3]
                 if not add_client:
                     if existing_client.date_of_birth != date_of_birth:
                         date_of_birth = existing_client.date_of_birth
@@ -30,15 +31,18 @@ class TransactionRepository:
                     if existing_client.phone != phone:
                         phone = existing_client.phone
                         update_client = True
+                    if existing_client.passport != passport:
+                        passport = existing_client.passport
+                        update_client = True
                     if existing_client.passport_valid_to != 'бессрочно':
                         if passport_valid_to < existing_client.passport_valid_to:
                             passport_valid_to = existing_client.passport_valid_to
                             update_client = True
 
                 client = Client(
-                            client=row[3],
+                            client=client_id,
                             date_of_birth=date_of_birth,
-                            passport=row[5],
+                            passport=passport,
                             passport_valid_to=passport_valid_to,
                             phone=phone
                         )

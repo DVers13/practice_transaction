@@ -1,5 +1,5 @@
 import csv
-import time
+import numpy as np
 import streamlit as st
 import requests
 from datetime import datetime, timedelta
@@ -18,6 +18,8 @@ if 'settings' not in st.session_state:
     st.session_state.settings = False
 if 'current_csv_transaction' not in st.session_state:
     st.session_state.current_csv_transaction = None
+if 'page_size' not in st.session_state:
+    st.session_state.page_size = 10
 if 'page_index' not in st.session_state:
     st.session_state.page_index = 0
 if 'process_transactions' not in st.session_state:
@@ -31,7 +33,6 @@ st.sidebar.info("info =)")
 
 if st.button('Write data to PostgreSQL'):
     with st.spinner("Just a moment ..."): 
-        s = time.time()
         url = "http://127.0.0.1:8000/transaction/upload_csv/"
         files = {'file': file.getvalue()}
         response = requests.post(url, files=files)
@@ -40,7 +41,6 @@ if st.button('Write data to PostgreSQL'):
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
         st.session_state.current_csv_transaction = [row[0] for row in csv_reader]
-        print(time.time() - s)
 
     st.success('Done!')
 
@@ -70,7 +70,7 @@ def fetch_data():
     json_response = response.json()
     return pd.DataFrame(
         [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
-        columns=['id_transaction', 'client','first_pattern', 'second_pattern', 'third_pattern']
+        columns=['id_transaction', 'client', 'first_pattern', 'second_pattern', 'third_pattern']
     )
 
 
@@ -87,7 +87,7 @@ def run_find_fraud_current():
     json_response = response.json()
     return pd.DataFrame(
         [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
-        columns=['id_transaction', 'client','first_pattern', 'second_pattern', 'third_pattern']
+        columns=['id_transaction', 'client', 'first_pattern', 'second_pattern', 'third_pattern']
     )
 
 def paginate_dataframe(df, page_size):
@@ -113,18 +113,22 @@ def paginate_dataframe(df, page_size):
     end_idx = start_idx + page_size
     return df.iloc[start_idx:end_idx]
 
+def func(pct, allvals):
+    absolute = int(np.round(pct/100.*np.sum(allvals)))
+    return f"{pct:.1f}%\n({absolute:d} t)"
+
 if st.button('Settings'):
     st.session_state.settings = not st.session_state.settings
 if st.session_state.settings:
-    st.markdown(""" 1ый паттерн """)
-    count_tran = st.slider("count_tran", 5, 100, st.session_state.count_tran, 1)
-    time_seconds = st.slider("time_seconds", 10, 600, st.session_state.time_seconds, 1)
+    st.markdown(""" Первый паттерн (частые транзакции за короткий промежуток времени)""")
+    count_tran = st.slider("Количество транзакций", 5, 100, st.session_state.count_tran, 1, help="Количество транзакций порог которых должен быть превышен")
+    time_seconds = st.slider("Время в секундах", 10, 600, st.session_state.time_seconds, 1, help="Максимальное время в секундах за которое может быть совершено n транзакций")
     st.session_state.count_tran = count_tran
     st.session_state.time_seconds = time_seconds
-    st.markdown(""" 2ой паттерн """)
+    st.markdown(""" Второй паттерн (транзакции на большую сумму, превышающую лимиты клиента) """)
     threshold_amount = st.slider("threshold_amount", min_value=1.0, max_value=50.0, value=float(st.session_state.threshold_amount), step=0.1)
     st.session_state.threshold_amount = threshold_amount
-    st.markdown(""" 3ий паттерн """)
+    st.markdown(""" Третий паттерн (географическая аномалия)""")
     time_minutes = st.slider("time_minutes", 5, 96, st.session_state.time_minutes, 1)
     st.session_state.time_minutes = time_minutes
 
@@ -141,14 +145,23 @@ if ffc.button('Find Fraud current csv'):
         st.session_state.process_transactions = run_find_fraud_current()
         st.success('Done!')
 
-page_size = 10
 if st.session_state.process_transactions is not None:
-    paged_df = paginate_dataframe(st.session_state.process_transactions, page_size)
+    dataframe = st.session_state.process_transactions
+    paged_df = paginate_dataframe(st.session_state.process_transactions, st.session_state.page_size)
     st.table(paged_df)
-
+    data = [len(dataframe[(dataframe['first_pattern']==True)]), 
+            len(dataframe[(dataframe['second_pattern']==True)]),
+            len(dataframe[(dataframe['third_pattern']==True)])]
+    for i in range(len(data)):
+        if data[i] == 0:
+            del data[i]
     fig, ax = plt.subplots()
-    ax.pie([paged_df.first_pattern[paged_df['first_pattern']==True].count(), 
-            paged_df.second_pattern[paged_df['second_pattern']==True].count(),
-            paged_df.third_pattern[paged_df['third_pattern']==True].count()],
-            labels=['first_pattern', 'second_pattern', 'third_pattern'])
+    wedges, texts, autotexts = ax.pie(data, autopct=lambda pct: func(pct, data),
+                                  textprops=dict(color="w"))
+    ax.legend(wedges, ['first_pattern', 'second_pattern', 'third_pattern'],
+          title="Transaction",
+          loc="center left",
+          bbox_to_anchor=(1, 0, 0.5, 1))
+    plt.setp(autotexts, size=8, weight="bold")
+
     st.pyplot(fig)
