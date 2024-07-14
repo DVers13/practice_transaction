@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 if 'count_tran' not in st.session_state:
     st.session_state.count_tran = 5
+if 'client_id' not in st.session_state:
+    st.session_state.client_id = None
 if 'time_seconds' not in st.session_state:
     st.session_state.time_seconds = 60
 if 'time_minutes' not in st.session_state:
@@ -69,11 +71,15 @@ def fetch_data():
     response = requests.post(url, json=data)
     json_response = response.json()
     return pd.DataFrame(
-        [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
-        columns=['id_transaction', 'client', 'first_pattern', 'second_pattern', 'third_pattern']
+        [(rep['id_transaction'],rep['client'],rep['is_night'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
+        columns=['id_transaction', 'client','is_night', 'first_pattern', 'second_pattern', 'third_pattern']
     )
 
-
+def get_client(client_id):
+    url = "http://127.0.0.1:8000/transaction/get_client_by_id?client_id=" + client_id
+    response = requests.post(url)
+    json_response = response.json()
+    return json_response
 
 def run_find_fraud_current():
     url = "http://127.0.0.1:8000/transaction/run_find_fraud"
@@ -86,8 +92,8 @@ def run_find_fraud_current():
     response = requests.post(url, json=data)
     json_response = response.json()
     return pd.DataFrame(
-        [(rep['id_transaction'],rep['client'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
-        columns=['id_transaction', 'client', 'first_pattern', 'second_pattern', 'third_pattern']
+        [(rep['id_transaction'],rep['client'],rep['is_night'], rep['first_pattern'], rep['second_pattern'], rep['third_pattern']) for rep in json_response],
+        columns=['id_transaction', 'client', 'is_night','first_pattern', 'second_pattern', 'third_pattern']
     )
 
 def paginate_dataframe(df, page_size):
@@ -126,10 +132,10 @@ if st.session_state.settings:
     st.session_state.count_tran = count_tran
     st.session_state.time_seconds = time_seconds
     st.markdown(""" Второй паттерн (транзакции на большую сумму, превышающую лимиты клиента) """)
-    threshold_amount = st.slider("threshold_amount", min_value=1.0, max_value=50.0, value=float(st.session_state.threshold_amount), step=0.1)
+    threshold_amount = st.slider("Множитель среднего значения", min_value=1.0, max_value=50.0, value=float(st.session_state.threshold_amount), step=0.1, help="Множитель среднего значения суммы транзакций клиента, превышение которого не допустимо")
     st.session_state.threshold_amount = threshold_amount
     st.markdown(""" Третий паттерн (географическая аномалия)""")
-    time_minutes = st.slider("time_minutes", 5, 96, st.session_state.time_minutes, 1)
+    time_minutes = st.slider("Время в минутах", 5, 96, st.session_state.time_minutes, 1, help="Время в минутах, за которое клиент может изменить свое местоположение")
     st.session_state.time_minutes = time_minutes
 
 
@@ -145,6 +151,18 @@ if ffc.button('Find Fraud current csv'):
         st.session_state.process_transactions = run_find_fraud_current()
         st.success('Done!')
 
+input, clear = st.columns([3, 1])
+
+st.session_state.client_id = input.text_input("Client ID", None)
+
+if clear.button('Clear'):
+    st.session_state.client_id = None
+
+if st.session_state.client_id is not None:
+    data_client = get_client(st.session_state.client_id)
+    data_client = data_client["Client"]
+    st.write(data_client)
+
 if st.session_state.process_transactions is not None:
     dataframe = st.session_state.process_transactions
     paged_df = paginate_dataframe(st.session_state.process_transactions, st.session_state.page_size)
@@ -156,7 +174,7 @@ if st.session_state.process_transactions is not None:
         if data[i] == 0:
             del data[i]
     fig, ax = plt.subplots()
-    wedges, texts, autotexts = ax.pie(data, autopct=lambda pct: func(pct, data),
+    wedges, texts, autotexts = ax.pie(data, autopct=lambda pct: func(pct, data),explode=(0.01, 0.03, 0.05,),
                                   textprops=dict(color="w"))
     ax.legend(wedges, ['first_pattern', 'second_pattern', 'third_pattern'],
           title="Transaction",

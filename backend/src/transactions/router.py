@@ -19,3 +19,8 @@ async def add_task(file: UploadFile = File(...)):
 async def run_find_fraud(params: Params):
     result = await TransactionRepository.run_find_fraud(params)
     return result
+
+@router.post("/get_client_by_id")
+async def get_client_by_id(client_id: str):
+    result = await TransactionRepository.get_client_by_id(client_id)
+    return result

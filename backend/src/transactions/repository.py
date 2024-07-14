@@ -129,6 +129,7 @@ class TransactionRepository:
         count_time_difference_max = params.pop("count_time_difference_max")
         time_difference_seconds = params.pop("time_difference_seconds")
         time_difference_minutes = params.pop("time_difference_minutes")
+        threshold_amount = params.pop("threshold_amount")
         async with new_session() as session:
             if not list_id_transaction:
                 query = select(Transaction.id_transaction)
@@ -167,7 +168,6 @@ class TransactionRepository:
                 count_time_difference = 0
                 amount_all = 0
                 amount_count = 0
-                threshold_amount = 4
                 first_pattern = False # 5 тр в минуту
                 second_pattern = False # превышение среднего
                 third_pattern = False # смена локации в течении менее 30мин
@@ -198,6 +198,7 @@ class TransactionRepository:
                 fraud = TransactionFraud(
                     id_transaction = transaction_row.id_transaction,
                     client=client,
+                    is_night = is_night,
                     first_pattern=first_pattern,
                     second_pattern=second_pattern,
                     third_pattern=third_pattern
@@ -205,4 +206,12 @@ class TransactionRepository:
                 if fraud.first_pattern or fraud.second_pattern or fraud.third_pattern:
                     transaction_fraud.append(fraud)
             return transaction_fraud
-                
+        
+    @classmethod
+    async def get_client_by_id(cls, client_id: str):
+        async with new_session() as session:
+            query = (select(Client).
+                    where(Client.client == client_id))
+            result = await session.execute(query)
+            client_row = result.mappings().first()
+            return client_row
