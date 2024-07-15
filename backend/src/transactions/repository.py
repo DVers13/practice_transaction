@@ -15,7 +15,8 @@ class TransactionRepository:
         headers = next(csv_reader)
         async with new_session() as session:
             for row in csv_reader:
-                existing_client = await session.execute(select(Client.client, Client.date_of_birth, Client.passport_valid_to, Client.phone, Client.passport).filter_by(client=row[3]))
+                existing_client = await session.execute(select(Client.client, Client.date_of_birth, Client.passport_valid_to, Client.phone, Client.passport)
+                                                        .filter_by(client=row[3]))
                 existing_client = existing_client.mappings().first()
                 add_client = False if existing_client else True
                 update_client = False
