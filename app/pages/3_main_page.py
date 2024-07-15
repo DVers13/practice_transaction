@@ -76,7 +76,7 @@ def fetch_data():
     )
 
 def get_client(client_id):
-    url = "http://127.0.0.1:8000/transaction/get_client_by_id?client_id=" + client_id
+    url = "http://127.0.0.1:8000/transaction/get_client_by_id?client_id=" + client_id.replace(" ", "")
     response = requests.post(url)
     json_response = response.json()
     return json_response

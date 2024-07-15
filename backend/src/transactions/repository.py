@@ -172,22 +172,22 @@ class TransactionRepository:
                 second_pattern = False # превышение среднего
                 third_pattern = False # смена локации в течении менее 30мин
                 
-                for ctran in client_transaction:
-                    if previous_transaction is not None and not first_pattern:
-                        time_difference += ctran.date - previous_transaction.date
-                        count_time_difference += 1
-                    else:
-                        time_difference = ctran.date - ctran.date
-                        count_time_difference += 1
-
-                    if count_time_difference > count_time_difference_max and time_difference <= timedelta(seconds=time_difference_seconds):
-                        first_pattern = True
-
+                for ctran in reversed(client_transaction):
                     amount_all += float(ctran.amount)
 
                     if (transaction_row.date - ctran.date) <= timedelta(minutes=time_difference_minutes) and transaction_row.city != ctran.city and not third_pattern:
                         third_pattern = True
                     
+                for ctran in reversed(client_transaction):
+                    if previous_transaction is not None:
+                        time_difference += ctran.date - previous_transaction.date
+                        count_time_difference += 1
+                    else:
+                        time_difference = ctran.date - ctran.date
+                
+                    if count_time_difference > count_time_difference_max and time_difference <= timedelta(seconds=time_difference_seconds):
+                        first_pattern = True
+                        break
                     previous_transaction = ctran
                 
                 amount_count = len(client_transaction) - 1 if len(client_transaction) > 1 else 0
