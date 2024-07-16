@@ -1,4 +1,5 @@
 import csv
+import time
 import numpy as np
 import streamlit as st
 import requests
@@ -35,6 +36,7 @@ st.sidebar.info("info =)")
 
 if st.button('Write data to PostgreSQL'):
     with st.spinner("Just a moment ..."): 
+        s = time.time()
         url = "http://127.0.0.1:8000/transaction/upload_csv/"
         files = {'file': file.getvalue()}
         response = requests.post(url, files=files)
@@ -43,8 +45,7 @@ if st.button('Write data to PostgreSQL'):
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
         st.session_state.current_csv_transaction = [row[0] for row in csv_reader]
-
-    st.success('Done!')
+    st.success(f'Done!, {time.time() - s}')
 
 def correct_time(time):
     time_part = time[2:]

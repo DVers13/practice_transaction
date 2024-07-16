@@ -52,3 +52,21 @@ class Transaction(Base):
     operation_result: Mapped[str]
     amount: Mapped[str]
     #is_fraud: Mapped[str] # %
+
+class TempTransaction(Base):
+    __tablename__ = "temp_transaction"
+
+    id_transaction: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[datetime]
+    card: Mapped[str]
+    client: Mapped[str]
+    date_of_birth: Mapped[datetime]
+    passport: Mapped[str]
+    passport_valid_to: Mapped[str]
+    phone: Mapped[str]
+    operation_type: Mapped[str]
+    amount: Mapped[str]
+    operation_result: Mapped[str]
+    terminal_type: Mapped[str]
+    city: Mapped[str]
+    address: Mapped[str]
