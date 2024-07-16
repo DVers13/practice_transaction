@@ -59,6 +59,7 @@ class TransactionRepository:
             result = await session.execute(stmt)
             unique_cards = result.fetchall()
 
+
             for card_data in unique_cards:
                 card_record = Card(
                     card=card_data.card,
@@ -147,7 +148,7 @@ class TransactionRepository:
         async with new_session() as session:
             stmt = select(TempTransaction).distinct()
             result = await session.execute(stmt)
-            transactions = result.fetchall()
+            transactions = result.scalars().all()
 
             for transaction_data in transactions:
                 card_id = await session.execute(
