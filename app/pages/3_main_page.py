@@ -44,7 +44,8 @@ if st.button('Write data to PostgreSQL'):
         response = requests.post(url, files=files)
 
         csv_data = file.read().decode('utf-8').splitlines()
-        csv_reader = csv.reader(csv_data)
+        dialect = csv.Sniffer().sniff(csv_data[0])
+        csv_reader = csv.reader(csv_data, dialect)
         headers = next(csv_reader)
         st.session_state.current_csv_transaction = [row[0] for row in csv_reader]
     st.success(f'Done!, {int((time.time() - s) // 60)} мин, {(time.time() - s) % 60} сек')
@@ -70,7 +71,8 @@ def fetch_data():
     data = {'count_time_difference_max': st.session_state.count_tran,
             'time_difference_seconds': st.session_state.time_seconds,
             'time_difference_minutes': st.session_state.time_minutes,
-            'threshold_amount': st.session_state.threshold_amount}
+            'threshold_amount': st.session_state.threshold_amount,
+            'count_enough_transaction': st.session_state.count_enough_transaction}
     response = requests.post(url, json=data)
     json_response = response.json()
     return pd.DataFrame(

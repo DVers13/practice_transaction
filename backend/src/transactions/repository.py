@@ -192,7 +192,8 @@ class TransactionRepository:
     async def upload_csv(cls, file: UploadFile = File(...)):
         contents = await file.read()
         csv_data = contents.decode('utf-8').splitlines()
-        csv_reader = csv.reader(csv_data)
+        dialect = csv.Sniffer().sniff(csv_data[0])
+        csv_reader = csv.reader(csv_data, dialect)
         next(csv_reader)
         async with new_session() as session:
             for row in csv_reader:
