@@ -17,6 +17,8 @@ if 'time_minutes' not in st.session_state:
     st.session_state.time_minutes = 30
 if 'threshold_amount' not in st.session_state:
     st.session_state.threshold_amount = 4.0
+if 'count_enough_transaction' not in st.session_state:
+    st.session_state.count_enough_transaction = 2
 if 'settings' not in st.session_state:
     st.session_state.settings = False
 if 'current_csv_transaction' not in st.session_state:
@@ -45,7 +47,7 @@ if st.button('Write data to PostgreSQL'):
         csv_reader = csv.reader(csv_data)
         headers = next(csv_reader)
         st.session_state.current_csv_transaction = [row[0] for row in csv_reader]
-    st.success(f'Done!, {time.time() - s}')
+    st.success(f'Done!, {int((time.time() - s) // 60)} мин, {(time.time() - s) % 60} сек')
 
 def correct_time(time):
     time_part = time[2:]
@@ -88,7 +90,8 @@ def run_find_fraud_current():
             'count_time_difference_max': st.session_state.count_tran,
             'time_difference_seconds': st.session_state.time_seconds,
             'time_difference_minutes': st.session_state.time_minutes,
-            'threshold_amount': st.session_state.threshold_amount}
+            'threshold_amount': st.session_state.threshold_amount,
+            'count_enough_transaction': st.session_state.count_enough_transaction}
             
     response = requests.post(url, json=data)
     json_response = response.json()
@@ -133,6 +136,8 @@ if st.session_state.settings:
     st.session_state.count_tran = count_tran
     st.session_state.time_seconds = time_seconds
     st.markdown(""" Второй паттерн (транзакции на большую сумму, превышающую лимиты клиента) """)
+    count_enough_transaction = st.slider("Количество минимальных транзакций", 1, 30, st.session_state.count_enough_transaction, 1)
+    st.session_state.count_enough_transaction = count_enough_transaction
     threshold_amount = st.slider("Множитель среднего значения", min_value=1.0, max_value=50.0, value=float(st.session_state.threshold_amount), step=0.1, help="Множитель среднего значения суммы транзакций клиента, превышение которого не допустимо")
     st.session_state.threshold_amount = threshold_amount
     st.markdown(""" Третий паттерн (географическая аномалия)""")
@@ -171,9 +176,7 @@ if st.session_state.process_transactions is not None:
     data = [len(dataframe[(dataframe['first_pattern']==True)]), 
             len(dataframe[(dataframe['second_pattern']==True)]),
             len(dataframe[(dataframe['third_pattern']==True)])]
-    for i in range(len(data)):
-        if data[i] == 0:
-            del data[i]
+
     fig, ax = plt.subplots()
     wedges, texts, autotexts = ax.pie(data, autopct=lambda pct: func(pct, data),explode=(0.01, 0.03, 0.05,),
                                   textprops=dict(color="w"))

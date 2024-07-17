@@ -273,6 +273,7 @@ class TransactionRepository:
         time_difference_seconds = params.pop("time_difference_seconds")
         time_difference_minutes = params.pop("time_difference_minutes")
         threshold_amount = params.pop("threshold_amount")
+        count_enough_transaction = params.pop("count_enough_transaction")
         async with new_session() as session:
             if not list_id_transaction:
                 query = select(Transaction.id_transaction)
@@ -334,7 +335,8 @@ class TransactionRepository:
                     previous_transaction = ctran
                 
                 amount_count = len(client_transaction) - 1 if len(client_transaction) > 1 else 0
-                if amount_count > 0 and not second_pattern:
+
+                if len(client_transaction) > count_enough_transaction and not second_pattern:
                     if float(transaction_row.amount) > (((amount_all - float(transaction_row.amount)) / (amount_count)) * threshold_amount):
                         second_pattern = True
                 

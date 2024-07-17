@@ -14,3 +14,4 @@ class Params(BaseModel):
     time_difference_seconds: int
     time_difference_minutes: int
     threshold_amount: float
+    count_enough_transaction: int
